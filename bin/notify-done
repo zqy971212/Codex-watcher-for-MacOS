@@ -1,0 +1,80 @@
+#!/usr/bin/env zsh
+set -u
+
+usage() {
+  print "Usage: notify-done [--title TITLE] [--sound NAME_OR_PATH] [--silent] [--no-notification] [message...]"
+}
+
+title="${CODEX_NOTIFY_TITLE:-Codex}"
+message="${CODEX_NOTIFY_MESSAGE:-Codex task complete}"
+sound="${CODEX_NOTIFY_SOUND:-Glass}"
+silent=0
+show_notification=1
+
+while (( $# > 0 )); do
+  case "$1" in
+    --title)
+      if (( $# < 2 )); then
+        print -u2 "notify-done: --title requires a value"
+        exit 2
+      fi
+      title="$2"
+      shift 2
+      ;;
+    --sound)
+      if (( $# < 2 )); then
+        print -u2 "notify-done: --sound requires a value"
+        exit 2
+      fi
+      sound="$2"
+      shift 2
+      ;;
+    --silent)
+      silent=1
+      shift
+      ;;
+    --no-notification)
+      show_notification=0
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      print -u2 "notify-done: unknown option: $1"
+      usage >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if (( $# > 0 )); then
+  message="$*"
+fi
+
+if [[ "$sound" != /* ]]; then
+  sound="/System/Library/Sounds/${sound%.aiff}.aiff"
+fi
+
+if (( ! silent )) && [[ -f "$sound" ]]; then
+  /usr/bin/afplay "$sound" >/dev/null 2>&1 &
+fi
+
+if (( show_notification )); then
+  /usr/bin/osascript - "$title" "$message" <<'APPLESCRIPT' >/dev/null 2>&1
+on run argv
+  set notificationTitle to item 1 of argv
+  set notificationMessage to item 2 of argv
+  display notification notificationMessage with title notificationTitle
+end run
+APPLESCRIPT
+fi
+
