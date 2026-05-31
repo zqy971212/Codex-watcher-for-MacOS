@@ -141,7 +141,7 @@ def trim_notified(state: Dict[str, Any]) -> None:
         state["notified_turn_ids"] = turn_ids[-MAX_NOTIFIED_TURN_IDS:]
 
 
-def notify(args: argparse.Namespace, turn_id: str, payload: Dict[str, Any]) -> None:
+def notify(args: argparse.Namespace, turn_id: str, payload: Dict[str, Any]) -> bool:
     duration_ms = payload.get("duration_ms")
     if isinstance(duration_ms, int) and duration_ms > 0:
         seconds = max(1, round(duration_ms / 1000))
@@ -151,18 +151,43 @@ def notify(args: argparse.Namespace, turn_id: str, payload: Dict[str, Any]) -> N
 
     if args.dry_run:
         print(f"dry-run: would notify turn_id={turn_id} message={message}", flush=True)
-        return
+        return True
 
     command = [str(args.notify_command), message]
     try:
-        subprocess.run(
+        result = subprocess.run(
             command,
             check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
+    except subprocess.TimeoutExpired:
+        print(
+            f"codex-watcher: notify command timed out for turn_id={turn_id}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
     except OSError as exc:
         print(f"codex-watcher: failed to run notify command: {exc}", file=sys.stderr, flush=True)
+        return False
+
+    if result.stdout:
+        print(result.stdout.rstrip(), flush=True)
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr, flush=True)
+
+    if result.returncode != 0:
+        print(
+            f"codex-watcher: notify command failed with exit code {result.returncode} for turn_id={turn_id}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+
+    print(f"codex-watcher: notified turn_id={turn_id}", flush=True)
+    return True
 
 
 def scan_once(args: argparse.Namespace, state: Dict[str, Any]) -> int:
@@ -196,7 +221,8 @@ def scan_once(args: argparse.Namespace, state: Dict[str, Any]) -> int:
             turn_id, payload = task_complete_event(line)
             if turn_id is None or payload is None or turn_id in notified_ids:
                 continue
-            notify(args, turn_id, payload)
+            if not notify(args, turn_id, payload):
+                continue
             state["notified_turn_ids"].append(turn_id)
             notified_ids.add(turn_id)
             notifications += 1
@@ -245,4 +271,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -64,17 +64,31 @@ if [[ "$sound" != /* ]]; then
   sound="/System/Library/Sounds/${sound%.aiff}.aiff"
 fi
 
-if (( ! silent )) && [[ -f "$sound" ]]; then
-  /usr/bin/afplay "$sound" >/dev/null 2>&1 &
+notify_status=0
+
+if (( ! silent )); then
+  if [[ -f "$sound" ]]; then
+    if ! /usr/bin/afplay "$sound" >/dev/null 2>&1; then
+      print -u2 "notify-done: failed to play sound: $sound"
+      notify_status=1
+    fi
+  else
+    print -u2 "notify-done: sound file not found: $sound"
+    notify_status=1
+  fi
 fi
 
 if (( show_notification )); then
-  /usr/bin/osascript - "$title" "$message" <<'APPLESCRIPT' >/dev/null 2>&1
+  if ! /usr/bin/osascript - "$title" "$message" <<'APPLESCRIPT' >/dev/null 2>&1
 on run argv
   set notificationTitle to item 1 of argv
   set notificationMessage to item 2 of argv
   display notification notificationMessage with title notificationTitle
 end run
 APPLESCRIPT
+  then
+    print -u2 "notify-done: failed to show notification"
+  fi
 fi
 
+exit "$notify_status"

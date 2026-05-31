@@ -36,6 +36,13 @@ payload.type == "task_complete"
 ./install.sh
 ```
 
+如果提示 `permission denied`，先修复脚本执行权限：
+
+```sh
+zsh ./fix-permissions.sh
+./install.sh
+```
+
 安装脚本会复制这些文件：
 
 - `bin/notify-done` -> `~/.local/bin/notify-done`
